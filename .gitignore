@@ -47,3 +47,8 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# Raw and zipped HTML files from web scraping
+web_scraping/htmls_info/
+web_scraping/htmls_table/
+web_scraping/*.zip
