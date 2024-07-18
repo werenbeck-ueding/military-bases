@@ -318,7 +318,7 @@ df_temp <- df_bundeswehr_units %>%
 # - Teilweise sind Kasernen auch direkt z. B. Heeresflugplätze. Ich würde gerade
 #   annehmen, dass man die Bezeichnung des Heeresflugplatzes streicht und nur
 #   den Kasernennamen behält. Vielleicht müsste man später noch einen Indikator
-#   einbauen, dass die Kaserne über einen FLugplatz verfügt.
+#   einbauen, dass die Kaserne über einen Flugplatz verfügt.
 
 # Fliegerhorste / Flugplätze
 # - Einheitliche Bezeichnung als "Fliegerhorst <gem_name>"
@@ -343,7 +343,7 @@ df_temp <- df_bundeswehr_units %>%
 # Anmerkungen für später
 # - StOV steht für Standortverwaltung. Heute sollten das eigentlich Bundeswehr
 #   dienstleistungszentren sein (muss geprüft werden). Für Konsistenz der 
-#   Namensgebung entsprechend umbenennen?
+#   Namensgebung entsprechend umbenennen? --> "StOV/BwDLZ"-Präfix
 # - Sind Standortmunitionsniederlagen gleichzusetzen mit Material-/Munitions-
 #   lager?
 # - Wie gehen wir mit Standortschießanlagen um? Vermutlich einfach umbenennen
