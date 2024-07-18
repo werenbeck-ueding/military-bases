@@ -213,7 +213,7 @@ df_bundeswehr_units <- df_html %>%
       municipality == "Büchel" & str_detect(mb_name, "NATO-Flugplatz") ~ 
         "07135018", # Büchel in Rhineland-Palatine
       municipality == "Roth" & str_detect(mb_name, "Otto-Lilienthal-Kaserne") ~ 
-      "09576143", # Roth
+        "09576143", # Roth
       T ~ gem_id
     )
   ) %>% 
@@ -280,7 +280,17 @@ df_temp <- df_bundeswehr_units %>%
 # TODO
 #_______________________________________________________________________________
 
-# Truppenübungsplätze
+# Kasernennamen programmatisch anpassen (höchste Prio)
+# - Auf korrekte Rechtschreibung / einheitliche Bezeichnung prüfen
+# - Namensänderungen wie z. B. ", Gebäude 15"
+# - Teilweise ist nur "Kaserne" angegeben. Über Zeitraum und Gemeinde sollte 
+#   sich der Kasernenname herausfinden lassen
+# - Teilweise sind Kasernen auch direkt z. B. Heeresflugplätze. Ich würde gerade
+#   annehmen, dass man die Bezeichnung des Heeresflugplatzes streicht und nur
+#   den Kasernennamen behält. Vielleicht müsste man später noch einen Indikator
+#   einbauen, dass die Kaserne über einen Flugplatz verfügt.
+
+# Truppenübungsplätze (höhere Prio)
 # - Truppenübungsplatz konsequent mit TrÜbPl abkürzen
 # - Umbenennen in "TrÜbPl <gem_name>", aber nur wenn es pro Gemeinde immer nur 
 #   einen TrÜbPl gibt, wovon ich ausgehe
@@ -295,32 +305,22 @@ df_temp <- df_bundeswehr_units %>%
 #   TrÜbPl sein (prüfen)
 # - Übungsgelände gleichzusetzen mit TrÜbPl?
 
-# Truppenlager
+# Truppenlager (niedrige Prio)
 # - Recherche: Sind Truppenlager zwangsläufig "Lager"? Sollte es sich dabei um
 #   Truppenlager aus der NS-Zeit handeln, die in den ersten Jahren der BRD
 #   weiter unterhalten wurden, sollte einheitlich Truppenlager für den Namen
 #   verwendet werden
 # - Alle Lager in "Truppenlager <gem_name>" umbenennen? Was wäre hier sinnvoll
 
-# Mobilmachungsstützpunkte (MobStp)
-# - Umbenennen in "MobStp <mb_name ohne MobStp>"
+# Mobilmachungsstützpunkte (MobStp) (höhere Prio)
+# - Umbenennen in "MobStp <mb_name ohne MobStp dadran>"
 # - Häufig bei Kasernen ist MobStp hinter dem Kasernennamen als ", MobStp". Hier
 #   die Endung entfernen und das MobStp voransetzen
 # - Teilweise finden sich noch weitere Namensbestandteile hinter MobStp, wenn es
 #   am Ende des Namens steht. Hier prüfen, ob es Sinn ergibt, die immer zu 
 #   streichen
 
-# Kasernennamen
-# - Auf korrekte Rechtschreibung / einheitliche Bezeichnung prüfen
-# - Namensänderungen wie z. B. ", Gebäude 15"
-# - Teilweise ist nur "Kaserne" angegeben. Über Zeitraum und Gemeinde sollte 
-#   sich der Kasernenname herausfinden lassen
-# - Teilweise sind Kasernen auch direkt z. B. Heeresflugplätze. Ich würde gerade
-#   annehmen, dass man die Bezeichnung des Heeresflugplatzes streicht und nur
-#   den Kasernennamen behält. Vielleicht müsste man später noch einen Indikator
-#   einbauen, dass die Kaserne über einen Flugplatz verfügt.
-
-# Fliegerhorste / Flugplätze
+# Fliegerhorste / Flugplätze (vorgehen wie beim Lager)
 # - Einheitliche Bezeichnung als "Fliegerhorst <gem_name>"
 # - Aufpassen, z. B. gibt es eine Fliegerhorstkirche. Ich nehme mal an, dass
 #   damit kein Fliegerhorst gemeint ist
@@ -328,7 +328,8 @@ df_temp <- df_bundeswehr_units %>%
 # - Teilweise findet sich die Bezeichnung "Militärflugplatz". Die auch in Flug-
 #   platz umbenennen
 
-# Koordinaten vereinheitlichen
+# Koordinaten vereinheitlichen (niedrigere Prio, bei besseren Ideen wie: gerne
+# in Notizen aufnehmen)
 # In dem Datensatz besteht das Problem, dass die Koordinaten trotz gleicher
 # Liegenschaft teilweise voneinander abweichen. Bei gleicher Liegenschaft
 # sollte hier vermutlich ein gewichtetes Mittel der angegebenen Koordinaten
@@ -341,21 +342,21 @@ df_temp <- df_bundeswehr_units %>%
 # nahe Munitions-/Materiallager einer Kaserne zuordnen.
 
 # Anmerkungen für später
-# - StOV steht für Standortverwaltung. Heute sollten das eigentlich Bundeswehr
-#   dienstleistungszentren sein (muss geprüft werden). Für Konsistenz der 
-#   Namensgebung entsprechend umbenennen? --> "StOV/BwDLZ"-Präfix
+# - StOV steht für Standortverwaltung. Heute sollten das eigentlich Bundeswehr-
+#   dienstleistungszentren sein (BBDLZ, muss geprüft werden). Für Konsistenz der 
+#   Namensgebung entsprechend umbenennen? Vielleicht beides zusammenfassen 
+#   ("StOV/BwDLZ") und dann über das Jahr den korrekten Begriff herausfinden
 # - Sind Standortmunitionsniederlagen gleichzusetzen mit Material-/Munitions-
-#   lager?
+#   lager? Wenn ja, dann einfach umbenennen
 # - Wie gehen wir mit Standortschießanlagen um? Vermutlich einfach umbenennen
 #   in "Standortschießanlage <gem_name>" oder aber Kasernenname
 # - Truppendienstgerichte sollten selten genug sein, dass "Truppendienstgericht
 #   <gem_name>" ausreicht
-# - Wie handhaben wir "Truppenunterkunft"?
+# - Wie handhaben wir "Truppenunterkunft"? Recherchieren, was das genau bedeutet
 # - Truppenübungsplatzkommandatur sollte irrelevant sein, Truppenübungsplatz
 #   sollte ausreichend sein
-# - Was ist "WBBeklA" und andere Ablürzungen? Vielleicht Glossar erstellen
-
-
+# - Was ist "WBBeklA" und andere Abkürzungen? Vielleicht Glossar erstellen (gibt
+#   es in Online auf der Website)
 
 
 
@@ -399,11 +400,11 @@ separate(
     plz = str_extract(city, "[:digit:]{5,5}"),
     city = str_trim(str_remove_all(city, "[:digit:]"))
   )
-  
-  df_bundeswehr_units %>% 
-    select(address, street, plz, city) %>% 
-    distinct() %>% 
-    View()
+
+df_bundeswehr_units %>% 
+  select(address, street, plz, city) %>% 
+  distinct() %>% 
+  View()
 
 
 df_bundeswehr_units$address[1:5]
@@ -428,14 +429,14 @@ df_bundeswehr_units %>%
   distinct() %>% 
   filter(is.na(coords)) %>% 
   View()
-  mutate(
-    municipality = ifelse(municipality == "", gem_name, municipality),
-    gem_name = ifelse(
-      is.na(gem_name) & municipality %in% sf_gem$gem_name, 
-      municipality, 
-      NA
-    )
-  ) %>% 
+mutate(
+  municipality = ifelse(municipality == "", gem_name, municipality),
+  gem_name = ifelse(
+    is.na(gem_name) & municipality %in% sf_gem$gem_name, 
+    municipality, 
+    NA
+  )
+) %>% 
   # Clean municipality names
   mutate(
     municipality = str_replace_all(municipality, " - ", "-"),
@@ -664,7 +665,7 @@ zoomerjoin::jaccard_string_group(
 
 
 
-  filter(!is.na(Koordinate)) %>% 
+filter(!is.na(Koordinate)) %>% 
   select(temp_mb_id, Liegenschaftsbezeichnung, Koordinate) %>% 
   distinct() %>% 
   separate(Koordinate, c("lat", "lon"), ", ", convert = T) %>% 
