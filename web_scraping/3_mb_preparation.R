@@ -276,6 +276,168 @@ df_temp <- df_bundeswehr_units %>%
   )
 
 
+
+#___________________________________________________________________________####
+#   Adapt barracks names programmatically                                   ####
+
+# The names of the barracks are not always consistent. To make them consistent,
+# the following steps are taken:
+# - Check for correct spelling / uniform designation
+# - Name changes such as ", Gebäude 15"
+# - Sometimes only "Kaserne" is given. The name of the barracks should be
+#   determined based on the period and municipality
+# - Sometimes barracks are directly e. g. air bases. I would currently assume
+#   that the designation of the air base is deleted and only the name of the
+#   barracks is retained. Maybe later another indicator should be built for the
+#   presence of an air base (can be a kind of proxy for the size of the site).
+
+# Code block to check the latest adjustment
+test <- df_barracks %>% 
+  summarize(n_obs = n(), .by = c(new_mb_name, gem_name, mb_note, rounded_lat,
+                                 rounded_lon)) %>% 
+  arrange(new_mb_name)
+
+
+# The following adjustments wrt to the barracks names are made:
+# - Add "-" before "Kaserne" if "Kaserne" is not at the beginning of the name
+# - Delete leading spaces
+# - Remove any double quotes
+# - Extract building info and remove it from new_mb_name
+# - Extract ", MobStp" from the name and put it in front of the string
+# - Drop "Zufahrt" from the name
+# - Rename barracks with only "Kaserne" in the name based on municipality, 
+#   period and research
+# - Filling missing values in the name based on municipality, period and 
+#   research
+# - Allow tolerance for lat and lon to be able to tolerate small coord diffs
+# - Add the mb_note for one new_mb_name, gem_name, coords combination to all
+#   observations with the same combination
+
+# Define a named list for the specific mappings
+name_mapping <- c(
+  "Alt Duvenstedt" = "Hugo-Junkers-Kaserne",
+  "Axstedt" = "Lufthauptmunitionsanstalt-Kaserne",
+  "Bernau bei Berlin" = "Heeresbekleidungsamt-Kaserne",
+  "Bischofswiesen" = "Jägerkaserne",
+  "Kalkar" = "Von-Seydlitz-Kaserne",
+  "Kiel" = "Offizierheimgesellschaft-Kaserne"
+)
+
+# List of municipalities where the pattern is to append "-Kaserne"
+dynamic_names <- c("Beeskow", "Dranske", "Eckernförde", "Greding", "Karlsruhe", 
+                   "Trier", "Schneizlreuth", "Schwedeneck")
+
+df_barracks <- df_temp %>%
+  # Add "-" before "Kaserne" if "Kaserne" is not at the beginning of the name
+  mutate(
+    new_mb_name = case_when(
+      str_detect(new_mb_name, "^Kaserne") ~ new_mb_name,
+      str_detect(new_mb_name, "-Kaserne") ~ new_mb_name,
+      str_detect(new_mb_name, "(?i)Kaserne") ~ str_replace(new_mb_name, 
+                                                           "(?i)Kaserne", 
+                                                           "-Kaserne"),
+      TRUE ~ new_mb_name
+    )
+  ) %>%
+  # Delete leading spaces and ending spaces
+  mutate(
+    new_mb_name = str_trim(new_mb_name)
+  ) %>%
+  # Remove any double quotes
+  mutate(
+    new_mb_name = str_remove_all(new_mb_name, "\"")
+  ) %>%
+  # Extract building info and remove it from new_mb_name
+  mutate(
+    building_info = str_extract(
+      new_mb_name, ",\\s*(?i)([a-zA-Z]*gebäude|geb\\.|haus|block)|/block.*"
+      ) %>%
+      str_replace("^/block", "Block") %>%
+      str_replace("^/", ""),
+    new_mb_name = str_remove(
+      new_mb_name, ",\\s*(?i)([a-zA-Z]*gebäude|geb\\.|haus|block)|/block.*"
+      )
+  ) %>%
+  # Extract ", MobStp" from the name and put it in front of the string
+  mutate(
+    new_mb_name = case_when(
+      str_detect(new_mb_name, ",\\s*(?i)MobStp.*") ~ 
+        str_replace(new_mb_name, "(.*),\\s*(MobStp.*)", "\\2 \\1"),
+      TRUE ~ new_mb_name
+    )
+  ) %>% 
+  # Drop "Zufahrt" from the name
+  mutate(
+    new_mb_name = if_else(
+      str_detect(new_mb_name, "^\\s*(?i)Zufahrt"),
+      NA_character_,
+      str_remove(new_mb_name, ",\\s*(?i)Zufahrt|;\\s*(?i)Zufahrt")
+    )
+  ) %>%
+  # Rename barracks with only "Kaserne" in the name based on municipality,
+  mutate(
+    new_mb_name = case_when(
+      str_detect(new_mb_name, "^\\s*(?i)Kaserne\\s*$") & 
+        gem_name %in% names(name_mapping) ~ name_mapping[gem_name],
+      str_detect(new_mb_name, "^\\s*(?i)Kaserne\\s*$") & 
+        gem_name %in% dynamic_names ~ paste0(gem_name, "-Kaserne"),
+      TRUE ~ new_mb_name
+    )
+  ) %>%
+  # Filling missing values in the name based
+  mutate(
+    new_mb_name = case_when(
+      str_trim(new_mb_name) == "" & gem_name == "Heide" ~ 
+        "Wulf-Isebrand-Kaserne",
+      str_trim(new_mb_name) == "" & gem_name == "Berlin" & 
+      html_file == "web_scraping/htmls_info/24824.html" ~ 
+        "Wasserschutzpolizei",
+      str_trim(new_mb_name) == "" & gem_name == "Heide" ~ 
+        "Wulf-Isebrand-Kaserne",
+      str_trim(new_mb_name) == "" & gem_name == "Mindelheim" ~
+        "Material-/Munitionslager Mindelheim",
+      str_trim(new_mb_name) == "" & gem_name == "Ummendorf" ~ 
+        "Katholischer Militärgeistlicher im Nebenamt",
+      TRUE ~ new_mb_name,
+      )
+  ) %>% 
+  # Allow tolerance for lat and lon to be able to tolerate small coord diffs
+  mutate(
+    rounded_lat = round(lat / 0.001) * 0.001,
+    rounded_lon = round(lon / 0.001) * 0.001
+  ) %>% 
+  # Add the mb_note for one new_mb_name, gem_name, coords combination to all 
+  # observations with the same combination
+  mutate(
+    grouped_mb_name = str_extract(new_mb_name, "^.*?(?=,|$)")
+  ) %>%
+  group_by(grouped_mb_name, gem_name, rounded_lat, rounded_lon) %>%
+  fill(mb_note, .direction = "downup") %>%
+  ungroup() %>%
+  # Select and rearrange
+  select(mb_name, new_mb_name, building_info, gem_name, coords, everything()) %>%
+  arrange(mb_name)
+
+  
+
+
+#_______________________________________________________________________________
+# Notes from Marc
+#_______________________________________________________________________________
+
+# - Your last step to get to "df_temp" may be watched cautiously. I found out that
+#   e.g. for the "Kaserne" in "Axstedt" the name of the barracks is "Lufthaupt-
+#   munitionsanstalt" but still it was used as a barracks.
+# - Jägerkaserne, Marinestützpunkt are also ambigious
+# - For some "Kaserne" the official standort name are WTD. 
+# - Several Kasernen are used several times, e.g. "Blücher-Kaserne"
+# - For some cases there are " " before "-Kaserne" and for some not
+
+
+
+
+
+
 #_______________________________________________________________________________
 # TODO
 #_______________________________________________________________________________
@@ -363,11 +525,10 @@ df_temp <- df_bundeswehr_units %>%
 
 # Nur ein kleiner Code, um sich alle einzigartigen Liegenschaftsnamen 
 # anzuschauen
-df_temp %>% 
+a <- df_temp %>% 
   summarize(n_obs = n(), .by = c(new_mb_name, gem_name, coords)) %>% 
   distinct() %>% 
-  arrange(new_mb_name) %>% 
-  View()
+  arrange(new_mb_name)
 
 
 
