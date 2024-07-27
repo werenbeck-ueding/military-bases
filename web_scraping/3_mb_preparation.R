@@ -235,13 +235,10 @@ df_bundeswehr_units <- df_html %>%
 # taken:
 # - Anything that is a storage or depot is renamed to "Material-/
 #   Munitionsdepot <`gem_name`>"
+# - "Ehem." and similar are removed from the names
 df_temp <- df_bundeswehr_units %>% 
   mutate(
-    mb_name = mb_name %>% 
-      str_remove("[Ee]hem.") %>% 
-      str_remove("^[Ee]hemalige") %>% 
-      str_remove("^[Ee]hemaliger") %>% 
-      str_remove("^[Ee]hemaliges"),
+      mb_name = str_remove_all(mb_name, "(?i)ehem\\S*\\b|(?i)ehem\\S*\\."),
     new_mb_name = case_when(
       # Consistent storage/depot names
       str_detect(mb_name, "[Aa]ußenlager") |
@@ -284,41 +281,50 @@ df_temp <- df_bundeswehr_units %>%
 # the following steps are taken:
 # - Check for correct spelling / uniform designation
 # - Name changes such as ", Gebäude 15"
-# - Sometimes only "Kaserne" is given. The name of the barracks should be
+# ✓ Sometimes only "Kaserne" is given. The name of the barracks should be
 #   determined based on the period and municipality
 # - Sometimes barracks are directly e. g. air bases. I would currently assume
 #   that the designation of the air base is deleted and only the name of the
 #   barracks is retained. Maybe later another indicator should be built for the
 #   presence of an air base (can be a kind of proxy for the size of the site).
 
-# Code block to check the latest adjustment
-test <- df_barracks %>% 
-  summarize(n_obs = n(), .by = c(new_mb_name, gem_name, mb_note, rounded_lat,
-                                 rounded_lon)) %>% 
-  arrange(new_mb_name)
-
 
 # The following adjustments wrt to the barracks names are made:
-# - Add "-" before "Kaserne" if "Kaserne" is not at the beginning of the name
-# - Delete leading spaces
-# - Remove any double quotes
-# - Extract building info and remove it from new_mb_name
-# - Extract ", MobStp" from the name and put it in front of the string
-# - Drop "Zufahrt" from the name
-# - Rename barracks with only "Kaserne" in the name based on municipality, 
+# ✓ Add "-" before "Kaserne" if "Kaserne" is not at the beginning of the name
+# ✓ Delete leading spaces
+# ✓ Remove any double quotes
+# ✓ Extract building info and remove it from new_mb_name (Haus, Gebäude, Block)
+# ✓ Extract ", MobStp" and ", MopStp" from the name and put it in front of the 
+#   string (Complete Task for "Mobilmachungsstützpunkte (MobStp)" done)
+# ✓ Drop "Zufahrt" from the name
+# ✓ Rename barracks with only "Kaserne" in the name based on municipality, 
 #   period and research
-# - Filling missing values in the name based on municipality, period and 
-#   research
-# - Allow tolerance for lat and lon to be able to tolerate small coord diffs
-# - Add the mb_note for one new_mb_name, gem_name, coords combination to all
+# ✓ Filling missing values in the name based on municipality, period and 
+#   research (NOT COMPLETE, some NAs resulting)
+# ✓ Allow tolerance for lat and lon to be able to tolerate small coord diffs
+# ✓ Add the mb_note for one new_mb_name, gem_name, coords combination to all
 #   observations with the same combination
+# ✓ Remove everything that follows "auf dem" in new_mb_name
+# ✓ Correct typos for Dienstgebäude 
+# ✓ Remove one space if there are two "  "
+# ✓ Correct typo for "Franz-Josef-Strauß-Kaserne" when it is written with "ss"
+# ✓ Rename "technisch" to "techn." and "Technisch" to "Techn."
+# ✓ Correct typo for "Schweiz"
+# ✓ Make Truppenunterkunft consistent (for Trukft and Trp.-Unterkunft)
+# ✓ Make Stov consistent (Standortverwaltung, STOV)
+# ✓ Rename Heeresflugpl. to Heeresflugplatz
+# ✓ Rename Umschlagzentrum to Umschlagszentrum
+# ✓ Make Pionierübungsplatz consistent
+# ✓ Remove everything that follows ", später" in mb_note (including später)
+# ✓ Correct typo for "Nike-Stellung" and "Nikestellung" and rearrange it
+# ? If new_mb_name is ambigious: add gemeindename to make it unique
 
 # Define a named list for the specific mappings
 name_mapping <- c(
   "Alt Duvenstedt" = "Hugo-Junkers-Kaserne",
   "Axstedt" = "Lufthauptmunitionsanstalt-Kaserne",
   "Bernau bei Berlin" = "Heeresbekleidungsamt-Kaserne",
-  "Bischofswiesen" = "Jägerkaserne",
+  "Bischofswiesen" = "Jäger-Kaserne",
   "Kalkar" = "Von-Seydlitz-Kaserne",
   "Kiel" = "Offizierheimgesellschaft-Kaserne"
 )
@@ -337,6 +343,28 @@ df_barracks <- df_temp %>%
                                                            "(?i)Kaserne", 
                                                            "-Kaserne"),
       TRUE ~ new_mb_name
+    ),
+    # Remove spaces before "-Kaserne"
+    new_mb_name = str_replace(new_mb_name, "\\s+-Kaserne", "-Kaserne"),
+    # Move text after the second "Kaserne" to mb_note
+    mb_note = if_else(
+      str_detect(new_mb_name, "(?i)Kaserne.*(?i)Kaserne"),
+      if_else(is.na(mb_note),
+              str_trim(str_extract(new_mb_name, 
+                                   "(?<=Kaserne\\s).*$"), 
+                       side = "both"),
+              str_trim(paste(mb_note, 
+                             str_extract(new_mb_name, 
+                                         "(?<=Kaserne\\s).*$"), 
+                             sep = "; "),
+                       side = "both")),
+      mb_note
+    ),
+    # Update new_mb_name by removing text from the second "Kaserne" onwards
+    new_mb_name = if_else(
+      str_detect(new_mb_name, "(?i)Kaserne.*(?i)Kaserne"),
+      str_replace(new_mb_name, "(?i)(Kaserne\\s).*$", "\\1"),
+      new_mb_name
     )
   ) %>%
   # Delete leading spaces and ending spaces
@@ -350,57 +378,50 @@ df_barracks <- df_temp %>%
   # Extract building info and remove it from new_mb_name
   mutate(
     building_info = str_extract(
-      new_mb_name, ",\\s*(?i)([a-zA-Z]*gebäude|geb\\.|haus|block)|/block.*"
-      ) %>%
+      new_mb_name, "[,/]\\s*(?i)([a-zA-Z]*gebäude|geb\\.|haus|block).*"
+    ) %>%
       str_replace("^/block", "Block") %>%
-      str_replace("^/", ""),
+      str_replace("^[,/]", "") %>%
+      str_replace("^\\s*", "") %>%
+      str_trim(),
     new_mb_name = str_remove(
-      new_mb_name, ",\\s*(?i)([a-zA-Z]*gebäude|geb\\.|haus|block)|/block.*"
-      )
+      new_mb_name, "[,/]\\s*(?i)([a-zA-Z]*gebäude|geb\\.|haus|block).*"
+    ) %>%
+      str_trim()
   ) %>%
-  # Extract ", MobStp" from the name and put it in front of the string
+  # Extract ", MobStp" and ", MopStp" from the name and put it in front of the 
+  # string (also for the cases with ";"); also make the names consistent for
+  # "Mob-Stützpunkt", "MobSt", "MobStp-"
   mutate(
-    new_mb_name = case_when(
-      str_detect(new_mb_name, ",\\s*(?i)MobStp.*") ~ 
-        str_replace(new_mb_name, "(.*),\\s*(MobStp.*)", "\\2 \\1"),
-      TRUE ~ new_mb_name
-    )
+    new_mb_name = str_replace(new_mb_name,
+                              "^(.*?)(,\\s*|;\\s*)(MobStp|MopStp).*", "\\3 \\1"),
+    new_mb_name = str_replace(new_mb_name, "(?i)Mob-Stützpunkt", "MobSt"),
+    new_mb_name = str_replace(new_mb_name, "(?i)MobSt ", "MobStp "),
+    new_mb_name = str_replace(new_mb_name, "(?i)MobStp-", "MobSt ")
   ) %>% 
-  # Drop "Zufahrt" from the name
+  # Drop "Zufahrt" and corresponding strings from the name
   mutate(
     new_mb_name = if_else(
       str_detect(new_mb_name, "^\\s*(?i)Zufahrt"),
       NA_character_,
-      str_remove(new_mb_name, ",\\s*(?i)Zufahrt|;\\s*(?i)Zufahrt")
+      str_remove(new_mb_name, "(?i),\\s*Zufahrt.*|;\\s*Zufahrt.*|(?i)Zufahrt.*")
     )
   ) %>%
-  # Rename barracks with only "Kaserne" in the name based on municipality,
+  # Rename barracks with only "Kaserne" in the name based on municipality, 
+  # period and research
   mutate(
     new_mb_name = case_when(
       str_detect(new_mb_name, "^\\s*(?i)Kaserne\\s*$") & 
         gem_name %in% names(name_mapping) ~ name_mapping[gem_name],
       str_detect(new_mb_name, "^\\s*(?i)Kaserne\\s*$") & 
         gem_name %in% dynamic_names ~ paste0(gem_name, "-Kaserne"),
+      # rename if new_mb_name ends with "-Kas" to "-Kaserne"
+      str_detect(new_mb_name, "(?i)-Kas$") ~ str_replace(new_mb_name, 
+                                                         "(?i)-Kas$", 
+                                                         "-Kaserne"),
       TRUE ~ new_mb_name
     )
   ) %>%
-  # Filling missing values in the name based
-  mutate(
-    new_mb_name = case_when(
-      str_trim(new_mb_name) == "" & gem_name == "Heide" ~ 
-        "Wulf-Isebrand-Kaserne",
-      str_trim(new_mb_name) == "" & gem_name == "Berlin" & 
-      html_file == "web_scraping/htmls_info/24824.html" ~ 
-        "Wasserschutzpolizei",
-      str_trim(new_mb_name) == "" & gem_name == "Heide" ~ 
-        "Wulf-Isebrand-Kaserne",
-      str_trim(new_mb_name) == "" & gem_name == "Mindelheim" ~
-        "Material-/Munitionslager Mindelheim",
-      str_trim(new_mb_name) == "" & gem_name == "Ummendorf" ~ 
-        "Katholischer Militärgeistlicher im Nebenamt",
-      TRUE ~ new_mb_name,
-      )
-  ) %>% 
   # Allow tolerance for lat and lon to be able to tolerate small coord diffs
   mutate(
     rounded_lat = round(lat / 0.001) * 0.001,
@@ -414,11 +435,140 @@ df_barracks <- df_temp %>%
   group_by(grouped_mb_name, gem_name, rounded_lat, rounded_lon) %>%
   fill(mb_note, .direction = "downup") %>%
   ungroup() %>%
+  # Remove everything that follows "auf dem" in new_mb_name
+  mutate(
+    new_mb_name = str_remove(new_mb_name, "(?i)\\bauf dem.*$")
+  ) %>%
+  # Filling missing values in the name based on municipality, 
+  # period and research (not complete, some NAs are still present)
+  mutate(
+    new_mb_name = case_when(
+      str_trim(new_mb_name) == "" & gem_name == "Heide" ~ 
+        "Wulf-Isebrand-Kaserne",
+      str_trim(new_mb_name) == "" & gem_name == "Berlin" & 
+        html_file == "web_scraping/htmls_info/24824.html" ~ 
+        "Wasserschutzpolizei",
+      str_trim(new_mb_name) == "" & gem_name == "Heide" ~ 
+        "Wulf-Isebrand-Kaserne",
+      str_trim(new_mb_name) == "" & gem_name == "Mindelheim" ~
+        "Material-/Munitionslager Mindelheim",
+      str_trim(new_mb_name) == "" & gem_name == "Ummendorf" ~ 
+        "Katholischer Militärgeistlicher im Nebenamt",
+      str_trim(new_mb_name) == "" ~ NA_character_,
+      TRUE ~ new_mb_name,
+    )
+  ) %>%
+  # Correct typos for Dienstgebäude
+  mutate(
+    new_mb_name = gsub("Dienstbebäude|Dienstgeäbude|Dienstgeäude|Dienstgeebäude|Dstgeb", 
+                       "Dienstgebäude", new_mb_name)
+  ) %>% 
+  # Remove one space if there are two "  "
+  mutate(
+    new_mb_name = str_replace_all(new_mb_name, "  ", " ")
+  ) %>%
+  # Correct typo for "Franz-Josef-Strauß-Kaserne" when it is written with "ss"
+  mutate(
+    new_mb_name = str_replace_all(new_mb_name, "Franz-Josef-Strauss-Kaserne", 
+                                  "Franz-Josef-Strauß-Kaserne")
+  ) %>%
+  # Rename "technisch" to "techn." and "Technisch" to "Techn."
+  mutate(
+    new_mb_name = str_replace_all(new_mb_name, "(?i)technisch\\S*", function(x) {
+      if (grepl("^Technisch", x)) "Techn." else "techn."
+    })
+  ) %>%
+  # Correct typo for "Schweiz"
+  mutate(
+    new_mb_name = str_replace_all(new_mb_name, "Schweitz", "Schweiz")
+  ) %>%
+  # Make Truppenunterkunft consistent (for Trukft and Trp.-Unterkunft) 
+  mutate(
+    new_mb_name = str_replace_all(new_mb_name, "TrUkft", "Truppenunterkunft"),
+    new_mb_name = str_replace_all(new_mb_name, "Trp.-Unterkunft", "Truppenunterkunft")
+  ) %>%
+  # Make Stov consistent (Standortverwaltung, STOV) and add StOV to the name if
+  # it is part of "unit" 
+  mutate(
+    new_mb_name = str_replace_all(new_mb_name, "(?i)STOV", "StOV"),
+    new_mb_name = str_replace_all(new_mb_name, "(?i)Standortverwaltung", "StOV"),
+    new_mb_name = if_else(
+      grepl("StOV", unit, ignore.case = TRUE) & !grepl("StOV", new_mb_name),
+      paste0(new_mb_name, " StOV"),
+      new_mb_name
+    )
+  ) %>%
+  # Rename Heeresflugpl. to Heeresflugplatz
+  mutate(
+    new_mb_name = str_replace_all(new_mb_name, "(?i)Heeresflugpl\\.", 
+                                  "Heeresflugplatz")
+  ) %>%
+  # Rename Umschlagzentrum to Umschlagszentrum
+  mutate(
+    new_mb_name = str_replace_all(new_mb_name, "(?i)Umschlagzentrum", 
+                                  "Umschlagszentrum")
+  ) %>%
+  #  Make Pionierübungsplatz consistent
+  mutate(
+    new_mb_name = str_replace(new_mb_name, "^Pionierübungsplatz L$", 
+                              "Pionierübungsplatz Land"),
+    # Add "Land" if "(L)" is present in unit and "Land" is not already in 
+    # new_mb_name
+    new_mb_name = case_when(
+      str_detect(unit, "\\(L\\)") & !str_detect(new_mb_name, "Land") & 
+        !str_detect(new_mb_name, "Wasser") ~ 
+        str_replace(new_mb_name, "^(Pionierübungsplatz\\b)", "\\1 Land"),
+      
+      # Add "Wasser" if "(W)" is present in unit and "Wasser" is not already in 
+      # new_mb_name
+      str_detect(unit, "\\(W\\)") & !str_detect(new_mb_name, "Wasser") ~ 
+        str_replace(new_mb_name, "^(Pionierübungsplatz\\b)", "\\1 Wasser"),
+      
+      # Add "Land und Wasser" if "(L/W)" or "L/W" is present in unit
+      str_detect(unit, "\\(L/W\\)|L/W") ~ 
+        case_when(
+          str_detect(new_mb_name, "Land") & 
+            str_detect(new_mb_name, "Wasser") ~ new_mb_name,
+          str_detect(new_mb_name, "Land") ~ str_replace(new_mb_name, 
+                                                        "^(Pionierübungsplatz\\b)", 
+                                                        "\\1 Land und Wasser"),
+          str_detect(new_mb_name, "Wasser") ~ str_replace(new_mb_name, 
+                                                          "^(Pionierübungsplatz\\b)", 
+                                                          "\\1 Land und Wasser"),
+          TRUE ~ str_replace(new_mb_name, "^(Pionierübungsplatz\\b)", 
+                             "\\1 Land und Wasser")
+        ),
+      # Default case: no change
+      TRUE ~ new_mb_name
+    ),
+    # If Wasser or Land is two times in the name, remove the doubled Wasser/Land
+    new_mb_name = sapply(new_mb_name, 
+                         function(x) str_c(unique(str_split(x, " ")[[1]]), 
+                                           collapse = " "))
+  ) %>% 
+  # Remove everything that follows ", später" in mb_note (including später)
+  mutate(
+    new_mb_name = str_replace(new_mb_name, "spätere", "später"),
+    mb_note = str_extract(new_mb_name, "(?<=, )später.*"),
+    new_mb_name = str_remove(new_mb_name, ", später.*")
+  ) %>% 
+  # 
+  mutate(
+    new_mb_name = str_replace(new_mb_name,
+                              "^(.*?)(,\\s*|;\\s*)(Nike-Stellung)(.*)", "\\3 \\1\\4"),
+    new_mb_name = str_replace(new_mb_name,
+                              "^(.*?)(Nike-Stellung)(.*)", "\\2\\1\\3"),
+    new_mb_name = str_replace(new_mb_name, "Nike-Stellung", "Nikestellung")
+  ) %>%
   # Select and rearrange
-  select(mb_name, new_mb_name, building_info, gem_name, coords, everything()) %>%
+  select(-grouped_mb_name, mb_name, new_mb_name, building_info, gem_name, 
+         coords, everything()) %>%
   arrange(mb_name)
 
-  
+# Code block to check the latest adjustment
+test <- df_barracks %>% 
+  filter(str_ends(mb_name, "-Kas"))
+
 
 
 #_______________________________________________________________________________
@@ -427,14 +577,25 @@ df_barracks <- df_temp %>%
 
 # - Your last step to get to "df_temp" may be watched cautiously. I found out that
 #   e.g. for the "Kaserne" in "Axstedt" the name of the barracks is "Lufthaupt-
-#   munitionsanstalt" but still it was used as a barracks.
-# - Jägerkaserne, Marinestützpunkt are also ambigious
-# - For some "Kaserne" the official standort name are WTD. 
-# - Several Kasernen are used several times, e.g. "Blücher-Kaserne"
-# - For some cases there are " " before "-Kaserne" and for some not
+#   munitionsanstalt" but still it was used as a barrack.
+# - By renaming the mb_name starting with "Lager" you changed some names, e.g.
+#   "Lager Drangstedt..." to "Lager Geestland" (Drangstedt is a part of Geestland
+# - For some "Kaserne" values the official standort name are only "WTD" 
+#   (Wehrtechnische Dienststelle). 
+# - Several Kasernen names are used several times, e.g. "Blücher-Kaserne", 
+#   "Jäger-Kaserne", "Marinestützpunkt", "Pionier-Kaserne", "Truppenunterkunft",
+#   "StOV", "Dienstgebäude", "Dienstgebäude StOV"
+#   (but may be no problem due to the other columns that indicate uniqueness)
+# - What to do with "Dienstgebäude XYZ"? Check unit to get hints!
+# - What does -FR- mean? 
 
-
-
+# TODO Slim the data transformation pipeline by rearranging, combining and code
+# slimming
+# TODO Keywords that indicate problems in new_mb_name
+# ",", "/", "WVE", "Barracks" "Air", "HQ", "im", "in", "innerhalb", 
+# Zahlen, "kein", "KWEA", "Brekendorf", "-FR-", 
+# "Panzertruppenschule" vs. "Panzertruppenschule Munster", "Rifu" (Richtfunk),
+# "San Mat", "Kaserne-US", "Standortmunitionsniederlage", "US ", "US-"
 
 
 
@@ -451,6 +612,22 @@ df_barracks <- df_temp %>%
 #   annehmen, dass man die Bezeichnung des Heeresflugplatzes streicht und nur
 #   den Kasernennamen behält. Vielleicht müsste man später noch einen Indikator
 #   einbauen, dass die Kaserne über einen Flugplatz verfügt.
+
+# Mobilmachungsstützpunkte (MobStp) (höhere Prio)
+# ✓ Umbenennen in "MobStp <mb_name ohne MobStp dadran>"
+# ✓ Häufig bei Kasernen ist MobStp hinter dem Kasernennamen als ", MobStp". Hier
+#   die Endung entfernen und das MobStp voransetzen
+# ✓ Teilweise finden sich noch weitere Namensbestandteile hinter MobStp, wenn es
+#   am Ende des Namens steht. Hier prüfen, ob es Sinn ergibt, die immer zu 
+#   streichen (Marc: ergibt Sinn zu streichen - wurde gestrichen)
+
+# Fliegerhorste / Flugplätze (vorgehen wie beim Lager)
+# - Einheitliche Bezeichnung als "Fliegerhorst <gem_name>"
+# - Aufpassen, z. B. gibt es eine Fliegerhorstkirche. Ich nehme mal an, dass
+#   damit kein Fliegerhorst gemeint ist
+# - Flugplätze analog handhaben
+# - Teilweise findet sich die Bezeichnung "Militärflugplatz". Die auch in Flug-
+#   platz umbenennen
 
 # Truppenübungsplätze (höhere Prio)
 # - Truppenübungsplatz konsequent mit TrÜbPl abkürzen
@@ -473,22 +650,6 @@ df_barracks <- df_temp %>%
 #   weiter unterhalten wurden, sollte einheitlich Truppenlager für den Namen
 #   verwendet werden
 # - Alle Lager in "Truppenlager <gem_name>" umbenennen? Was wäre hier sinnvoll
-
-# Mobilmachungsstützpunkte (MobStp) (höhere Prio)
-# - Umbenennen in "MobStp <mb_name ohne MobStp dadran>"
-# - Häufig bei Kasernen ist MobStp hinter dem Kasernennamen als ", MobStp". Hier
-#   die Endung entfernen und das MobStp voransetzen
-# - Teilweise finden sich noch weitere Namensbestandteile hinter MobStp, wenn es
-#   am Ende des Namens steht. Hier prüfen, ob es Sinn ergibt, die immer zu 
-#   streichen
-
-# Fliegerhorste / Flugplätze (vorgehen wie beim Lager)
-# - Einheitliche Bezeichnung als "Fliegerhorst <gem_name>"
-# - Aufpassen, z. B. gibt es eine Fliegerhorstkirche. Ich nehme mal an, dass
-#   damit kein Fliegerhorst gemeint ist
-# - Flugplätze analog handhaben
-# - Teilweise findet sich die Bezeichnung "Militärflugplatz". Die auch in Flug-
-#   platz umbenennen
 
 # Koordinaten vereinheitlichen (niedrigere Prio, bei besseren Ideen wie: gerne
 # in Notizen aufnehmen)
@@ -603,7 +764,7 @@ mutate(
     municipality = str_replace_all(municipality, " - ", "-"),
     municipality = case_when(
       municipality == "Altenstadt" & krs_name == "Weilheim-Schongau" ~
-        "Altenstadt (Oberbayern)"
+        "Altenstadt (Oberbayern)",
       municipality %in% c("Altenstadt bei Schongau", "Altenstadt/Schongau") ~
         "Altenstadt (Oberbayern)"
     )
@@ -707,7 +868,7 @@ sf_temp %>%
     municipality = str_replace_all(municipality, " - ", "-"),
     municipality = case_when(
       municipality == "Altenstadt" & krs_name == "Weilheim-Schongau" ~
-        "Altenstadt (Oberbayern)"
+        "Altenstadt (Oberbayern)",
       municipality %in% c("Altenstadt bei Schongau", "Altenstadt/Schongau") ~
         "Altenstadt (Oberbayern)"
     )
