@@ -552,7 +552,7 @@ df_barracks <- df_temp %>%
     mb_note = str_extract(new_mb_name, "(?<=, )später.*"),
     new_mb_name = str_remove(new_mb_name, ", später.*")
   ) %>% 
-  # 
+  # Make Nike-Stellung consistent
   mutate(
     new_mb_name = str_replace(new_mb_name,
                               "^(.*?)(,\\s*|;\\s*)(Nike-Stellung)(.*)", "\\3 \\1\\4"),
